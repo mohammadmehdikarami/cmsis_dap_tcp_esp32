@@ -535,7 +535,7 @@ the ADC reading from a current sense amplifier:
 ## Optional GPIO control
 
 On ESP32-C3, ESP32-S3 and ESP32-C6, enable **CMSIS-DAP configuration >
-Console commands > Enable lightweight GPIO control commands**
+Manual GPIO control > Enable lightweight GPIO control commands**
 (`CONFIG_ESP_GPIO_CONTROL_ENABLED`). This feature is disabled by default and
 uses the existing serial and TCP consoles without creating another task.
 
