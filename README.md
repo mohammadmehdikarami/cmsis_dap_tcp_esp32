@@ -553,8 +553,8 @@ Both consoles accept the same commands (replace `<pin>` with an allowed GPIO):
 ```text
 gpio list
 gpio config <pin> input floating
-gpio config <pin> input up
-gpio config <pin> input down
+gpio config <pin> input pull-up
+gpio config <pin> input pull-down
 gpio config <pin> push-pull 0
 gpio config <pin> open-drain 1
 gpio read <pin>

@@ -359,7 +359,7 @@ static void print_usage(FILE *out)
 {
     fprintf(out, "Usage:\n"
             "  gpio list\n"
-            "  gpio config <pin> input <floating|up|down>\n"
+            "  gpio config <pin> input <floating|pull-up|pull-down>\n"
             "  gpio config <pin> <push-pull|open-drain> <0|1>\n"
             "  gpio read <pin>\n"
             "  gpio write <pin> <0|1>\n"
@@ -384,7 +384,7 @@ static int run_command(FILE *out, int argc, char **argv)
             if (config->mode == CONTROL_UNUSED) {
                 fprintf(out, "GPIO%d: available, unconfigured\n", pin);
             } else if (config->mode == CONTROL_INPUT) {
-                const char *pulls[] = { "floating", "up", "down" };
+                const char *pulls[] = { "floating", "pull-up", "pull-down" };
                 fprintf(out, "GPIO%d: input %s, level=%d\n", pin, pulls[config->pull], gpio_get_level(pin));
             } else {
                 fprintf(out, "GPIO%d: %s, boot=%u, latch=%d, level=%d\n", pin,
@@ -421,9 +421,9 @@ static int run_command(FILE *out, int argc, char **argv)
             config.mode = CONTROL_INPUT;
             if (strcmp(argv[4], "floating") == 0)
                 config.pull = CONTROL_FLOATING;
-            else if (strcmp(argv[4], "up") == 0)
+            else if (strcmp(argv[4], "pull-up") == 0)
                 config.pull = CONTROL_PULL_UP;
-            else if (strcmp(argv[4], "down") == 0)
+            else if (strcmp(argv[4], "pull-down") == 0)
                 config.pull = CONTROL_PULL_DOWN;
             else {
                 print_usage(out);
