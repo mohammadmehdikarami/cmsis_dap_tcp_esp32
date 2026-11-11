@@ -195,8 +195,12 @@ static bool valid_config(int pin, const struct pin_config *config)
             config->default_level == 0 &&
             (config->pull == CONTROL_FLOATING || GPIO_IS_VALID_OUTPUT_GPIO(pin));
     }
-    return (config->mode == CONTROL_PUSH_PULL || config->mode == CONTROL_OPEN_DRAIN) &&
-        config->pull == CONTROL_FLOATING && GPIO_IS_VALID_OUTPUT_GPIO(pin);
+    if (!GPIO_IS_VALID_OUTPUT_GPIO(pin))
+        return false;
+    if (config->mode == CONTROL_PUSH_PULL)
+        return config->pull == CONTROL_FLOATING;
+    return config->mode == CONTROL_OPEN_DRAIN &&
+        (config->pull == CONTROL_FLOATING || config->pull == CONTROL_PULL_UP);
 }
 
 static esp_err_t apply_config(int pin, const struct pin_config *config, int level)
@@ -366,7 +370,8 @@ static void print_usage(FILE *out)
     fprintf(out, "Usage:\n"
             "  gpio list\n"
             "  gpio config <pin> input <floating|pull-up|pull-down>\n"
-            "  gpio config <pin> <push-pull|open-drain> <0|1>\n"
+            "  gpio config <pin> push-pull <0|1>\n"
+            "  gpio config <pin> open-drain <0|1> [floating|pull-up]\n"
             "  gpio read <pin>\n"
             "  gpio write <pin> <0|1>\n"
             "  gpio save <pin>\n"
@@ -394,9 +399,11 @@ static int run_command(FILE *out, int argc, char **argv)
                 fprintf(out, "GPIO%d: available, unconfigured\n", pin);
             } else if (config->mode == CONTROL_INPUT) {
                 fprintf(out, "GPIO%d: input %s, level=%d\n", pin, pulls[config->pull], gpio_get_level(pin));
+            } else if (config->mode == CONTROL_OPEN_DRAIN) {
+                fprintf(out, "GPIO%d: open-drain %s, latch=%d, level=%d\n", pin,
+                        pulls[config->pull], output_levels[pin], gpio_get_level(pin));
             } else {
-                fprintf(out, "GPIO%d: %s, latch=%d, level=%d\n", pin,
-                        config->mode == CONTROL_OPEN_DRAIN ? "open-drain" : "push-pull",
+                fprintf(out, "GPIO%d: push-pull, latch=%d, level=%d\n", pin,
                         output_levels[pin], gpio_get_level(pin));
             }
             const struct pin_config *saved = &saved_pin_configs[pin];
@@ -404,21 +411,26 @@ static int run_command(FILE *out, int argc, char **argv)
                 fprintf(out, "  Saved startup: none\n");
             } else if (saved->mode == CONTROL_INPUT) {
                 fprintf(out, "  Saved startup: input %s\n", pulls[saved->pull]);
+            } else if (saved->mode == CONTROL_OPEN_DRAIN) {
+                fprintf(out, "  Saved startup: open-drain %s, level=%u\n",
+                        pulls[saved->pull], (unsigned)saved->default_level);
             } else {
-                fprintf(out, "  Saved startup: %s, level=%u\n",
-                        saved->mode == CONTROL_OPEN_DRAIN ? "open-drain" : "push-pull",
-                        (unsigned)saved->default_level);
+                fprintf(out, "  Saved startup: push-pull, level=%u\n", (unsigned)saved->default_level);
             }
         }
         return 0;
     }
 
-    bool configure = argc == 5 && strcmp(argv[1], "config") == 0;
+    bool configure = (argc == 5 || argc == 6) && strcmp(argv[1], "config") == 0;
     bool read = argc == 3 && strcmp(argv[1], "read") == 0;
     bool write = argc == 4 && strcmp(argv[1], "write") == 0;
     bool save = argc == 3 && strcmp(argv[1], "save") == 0;
     bool clear = argc == 3 && strcmp(argv[1], "clear") == 0;
     if (!configure && !read && !write && !save && !clear) {
+        print_usage(out);
+        return 1;
+    }
+    if (configure && argc == 6 && strcmp(argv[3], "open-drain") != 0) {
         print_usage(out);
         return 1;
     }
@@ -463,6 +475,16 @@ static int run_command(FILE *out, int argc, char **argv)
                 return 1;
             }
             config.default_level = level;
+            if (argc == 6) {
+                if (strcmp(argv[5], "floating") == 0)
+                    config.pull = CONTROL_FLOATING;
+                else if (strcmp(argv[5], "pull-up") == 0)
+                    config.pull = CONTROL_PULL_UP;
+                else {
+                    print_usage(out);
+                    return 1;
+                }
+            }
         }
         if (!valid_config(pin, &config)) {
             fprintf(out, "Error: GPIO%d does not support this mode or pull resistor.\n", pin);

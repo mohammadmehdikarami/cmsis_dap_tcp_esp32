@@ -557,6 +557,7 @@ gpio config <pin> input pull-up
 gpio config <pin> input pull-down
 gpio config <pin> push-pull 0
 gpio config <pin> open-drain 1
+gpio config <pin> open-drain 1 pull-up
 gpio read <pin>
 gpio write <pin> 0
 gpio save <pin>
@@ -584,9 +585,14 @@ as a floating input. Only `save` and `clear` write GPIO settings to NVS.
 `read` and `save` require a configured pin. `read` reports its physical input
 level; `list` shows live state and saved startup settings separately.
 
-For open-drain outputs, level 0 drives low and level 1 releases the pin. Supply
-an external pull-up to a voltage supported by the ESP32 and the connected
-device. Output modes do not enable internal pull resistors. Operations from
+For open-drain outputs, level 0 drives low and level 1 releases the pin. The
+optional final argument is `floating` (the default) or `pull-up`. `pull-up`
+enables the ESP32's weak internal pull-up; `floating` disables internal pull
+resistors. Use an external pull-up when the connected circuit needs a stronger
+pull-up, to a voltage supported by both devices. The pull selection is a live
+setting until explicitly saved with `save <pin>`, and saved selections are
+restored at boot. The optional pull argument is accepted only for open-drain;
+push-pull outputs keep internal pull resistors disabled. Operations from
 simultaneous console clients are serialized with a mutex.
 
 When using this as a component, initialize NVS and call `gpio_control_init()`
