@@ -559,19 +559,30 @@ gpio config <pin> push-pull 0
 gpio config <pin> open-drain 1
 gpio read <pin>
 gpio write <pin> 0
+gpio save <pin>
 gpio clear <pin>
 ```
 
-`config` applies and saves the mode, input pull and default output level in
-NVS. Saved configurations are checked against the current allow-list and pin
-restrictions before being restored at boot, before either console starts.
+`config` applies the mode, input pull and initial output level only at runtime.
+`write` changes only the live output latch. Neither command writes NVS or
+changes previously saved startup settings, so scripts can reconfigure pins
+repeatedly without writing flash.
+
+Use `save <pin>` to explicitly save that pin's current mode, input pull and
+output latch level as its startup defaults in NVS. For example, configuring
+an output at 0, writing 1, then saving it makes its startup level 1. For
+open-drain outputs, the latch is saved, not the measured pin voltage.
+Unsaved changes are lost on reboot; previously saved settings are restored.
+Saved configurations are checked against the current allow-list and pin
+restrictions before being restored, before either console starts.
 The default output latch is loaded before enabling the output driver; these
 defaults take effect during application startup, not throughout reset or the
-bootloader. `write` changes the live output latch without writing flash or
-changing its boot default. Run `config` again to change the boot default.
-`clear` removes that pin's saved configuration and leaves it as a floating
-input. `read` requires a configured pin and reports its physical input level;
-`list` also shows an output's boot default and current output latch.
+bootloader.
+
+`clear <pin>` explicitly removes that pin's saved configuration and leaves it
+as a floating input. Only `save` and `clear` write GPIO settings to NVS.
+`read` and `save` require a configured pin. `read` reports its physical input
+level; `list` shows live state and saved startup settings separately.
 
 For open-drain outputs, level 0 drives low and level 1 releases the pin. Supply
 an external pull-up to a voltage supported by the ESP32 and the connected

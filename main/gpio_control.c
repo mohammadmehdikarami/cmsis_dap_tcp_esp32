@@ -35,6 +35,8 @@ struct pin_config {
 };
 
 static struct pin_config pin_configs[GPIO_NUM_MAX];
+// Last successfully saved startup settings; kept separate from live changes.
+static struct pin_config saved_pin_configs[GPIO_NUM_MAX];
 static int output_levels[GPIO_NUM_MAX];
 static SemaphoreHandle_t control_mutex;
 static uint64_t allowed_pins;
@@ -243,7 +245,8 @@ static esp_err_t store_config(int pin, const struct pin_config *config)
 static esp_err_t change_config(int pin, const struct pin_config *config)
 {
     esp_err_t err = apply_config(pin, config, config->default_level);
-    if (err == ESP_OK)
+    // Clearing is an explicit NVS operation. Ordinary configuration is live-only.
+    if (err == ESP_OK && config->mode == CONTROL_UNUSED)
         err = store_config(pin, config);
     if (err != ESP_OK) {
         esp_err_t rollback = apply_config(pin, &pin_configs[pin], output_levels[pin]);
@@ -253,6 +256,8 @@ static esp_err_t change_config(int pin, const struct pin_config *config)
     }
     pin_configs[pin] = *config;
     output_levels[pin] = config->default_level;
+    if (config->mode == CONTROL_UNUSED)
+        saved_pin_configs[pin] = *config;
     return ESP_OK;
 }
 
@@ -342,6 +347,7 @@ esp_err_t gpio_control_init(void)
             fprintf(stderr, "GPIO%d: ignoring invalid or unavailable saved configuration.\n", pin);
             continue;
         }
+        saved_pin_configs[pin] = config;
         err = apply_config(pin, &config, config.default_level);
         if (err == ESP_OK) {
             pin_configs[pin] = config;
@@ -363,8 +369,10 @@ static void print_usage(FILE *out)
             "  gpio config <pin> <push-pull|open-drain> <0|1>\n"
             "  gpio read <pin>\n"
             "  gpio write <pin> <0|1>\n"
+            "  gpio save <pin>\n"
             "  gpio clear <pin>\n"
-            "config saves settings and the boot level; write changes only the live level.\n");
+            "config and write change only live state; save stores live state as startup defaults.\n"
+            "clear removes saved settings and leaves a floating input.\n");
 }
 
 static int run_command(FILE *out, int argc, char **argv)
@@ -380,16 +388,26 @@ static int run_command(FILE *out, int argc, char **argv)
                 fprintf(out, "GPIO%d: unavailable: %s\n", pin, reason);
                 continue;
             }
+            const char *pulls[] = { "floating", "pull-up", "pull-down" };
             const struct pin_config *config = &pin_configs[pin];
             if (config->mode == CONTROL_UNUSED) {
                 fprintf(out, "GPIO%d: available, unconfigured\n", pin);
             } else if (config->mode == CONTROL_INPUT) {
-                const char *pulls[] = { "floating", "pull-up", "pull-down" };
                 fprintf(out, "GPIO%d: input %s, level=%d\n", pin, pulls[config->pull], gpio_get_level(pin));
             } else {
-                fprintf(out, "GPIO%d: %s, boot=%u, latch=%d, level=%d\n", pin,
+                fprintf(out, "GPIO%d: %s, latch=%d, level=%d\n", pin,
                         config->mode == CONTROL_OPEN_DRAIN ? "open-drain" : "push-pull",
-                        (unsigned)config->default_level, output_levels[pin], gpio_get_level(pin));
+                        output_levels[pin], gpio_get_level(pin));
+            }
+            const struct pin_config *saved = &saved_pin_configs[pin];
+            if (saved->mode == CONTROL_UNUSED) {
+                fprintf(out, "  Saved startup: none\n");
+            } else if (saved->mode == CONTROL_INPUT) {
+                fprintf(out, "  Saved startup: input %s\n", pulls[saved->pull]);
+            } else {
+                fprintf(out, "  Saved startup: %s, level=%u\n",
+                        saved->mode == CONTROL_OPEN_DRAIN ? "open-drain" : "push-pull",
+                        (unsigned)saved->default_level);
             }
         }
         return 0;
@@ -398,8 +416,9 @@ static int run_command(FILE *out, int argc, char **argv)
     bool configure = argc == 5 && strcmp(argv[1], "config") == 0;
     bool read = argc == 3 && strcmp(argv[1], "read") == 0;
     bool write = argc == 4 && strcmp(argv[1], "write") == 0;
+    bool save = argc == 3 && strcmp(argv[1], "save") == 0;
     bool clear = argc == 3 && strcmp(argv[1], "clear") == 0;
-    if (!configure && !read && !write && !clear) {
+    if (!configure && !read && !write && !save && !clear) {
         print_usage(out);
         return 1;
     }
@@ -459,6 +478,13 @@ static int run_command(FILE *out, int argc, char **argv)
     } else if (read) {
         fprintf(out, "GPIO%d: %d\n", pin, gpio_get_level(pin));
         return 0;
+    } else if (save) {
+        struct pin_config snapshot = pin_configs[pin];
+        // Save the output latch, not the measured level (important for open-drain).
+        snapshot.default_level = snapshot.mode == CONTROL_INPUT ? 0 : output_levels[pin];
+        err = store_config(pin, &snapshot);
+        if (err == ESP_OK)
+            saved_pin_configs[pin] = snapshot;
     } else if (write) {
         int level;
         if (pin_configs[pin].mode == CONTROL_INPUT || !parse_number(argv[3], 1, &level)) {
@@ -474,7 +500,9 @@ static int run_command(FILE *out, int argc, char **argv)
         return 1;
     }
     fprintf(out, "GPIO%d: %s.\n", pin, write ? "live level updated (not saved)" :
-            clear ? "saved configuration removed; floating input" : "configuration applied and saved");
+            clear ? "saved configuration removed; floating input" :
+            save ? "current configuration saved as startup defaults" :
+            "live configuration applied (not saved)");
     return 0;
 }
 
