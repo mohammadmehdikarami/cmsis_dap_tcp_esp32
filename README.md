@@ -545,8 +545,9 @@ Check the board schematic before adding pins: exclude strapping pins and pins
 connected to other board peripherals. Pins reserved by ESP-IDF (including
 flash/PSRAM), configured DAP/reset/LED and UART/console pins are rejected even
 when allow-listed. Native USB and chip-debug JTAG pins remain unavailable.
-When ADC streaming is enabled, all ADC1-capable pins are excluded, since the
-ADC GPIO can change between client connections.
+When ADC streaming is enabled, only its selected GPIO and any GPIO still held
+by an existing ADC connection are excluded. Other ADC1-capable pins remain
+available for manual GPIO control, subject to the other restrictions above.
 
 Both consoles accept the same commands (replace `<pin>` with an allowed GPIO):
 
@@ -595,8 +596,26 @@ restored at boot. The optional pull argument is accepted only for open-drain;
 push-pull outputs keep internal pull resistors disabled. Operations from
 simultaneous console clients are serialized with a mutex.
 
+ADC settings changes use the same mutex. An ADC configuration cannot select
+a pin configured for manual GPIO control (including a saved startup
+configuration), and manual GPIO commands cannot take a selected or active ADC
+pin. Use `gpio clear <pin>` to remove manual ownership before assigning it to
+ADC. Clearing ADC overrides also checks the default ADC pin for conflicts.
+
+ADC setting changes still take effect on the next client connection. For
+example, if ADC is sampling GPIO1 and GPIO2 is selected for the next connection,
+both pins are protected until the current connection ends and the driver is
+deinitialized. GPIO1 then becomes available if no longer selected. If driver
+deinitialization fails, the old pin stays protected and further ADC connections
+are refused until reboot. Saved manual GPIO settings that conflict with the
+selected ADC pin are skipped at startup; they are not erased from NVS.
+
 When using this as a component, initialize NVS and call `gpio_control_init()`
-before exposing the consoles. The automatic interface exclusions follow the
+before starting the ADC service or exposing the consoles. When consuming this
+as a component, the running ADC instance's supplied configuration provides the
+fallback ADC pin; before it starts, the Kconfig default is used. A conflicting
+manual GPIO configuration prevents that ADC instance from starting. The
+automatic interface exclusions follow the
 project's Kconfig settings; exclude any additional or differently assigned
 host-application pins from the allow-list yourself.
 

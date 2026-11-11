@@ -17,7 +17,7 @@
 #include "gpio_control.h"
 
 #ifdef CONFIG_ESP_ADC_STREAM_ENABLED
-#include "esp_adc/adc_continuous.h"
+#include "adc_stream.h"
 #endif
 
 #define GPIO_NVS_NAMESPACE "gpio_control"
@@ -40,8 +40,26 @@ static struct pin_config saved_pin_configs[GPIO_NUM_MAX];
 static int output_levels[GPIO_NUM_MAX];
 static SemaphoreHandle_t control_mutex;
 static uint64_t allowed_pins;
-static uint64_t adc_pins;
 static bool ready;
+
+esp_err_t gpio_control_lock(void)
+{
+    if (control_mutex == NULL)
+        return ESP_ERR_INVALID_STATE;
+    return xSemaphoreTake(control_mutex, portMAX_DELAY) == pdTRUE ? ESP_OK : ESP_FAIL;
+}
+
+void gpio_control_unlock(void)
+{
+    xSemaphoreGive(control_mutex);
+}
+
+bool gpio_control_pin_is_configured(int pin)
+{
+    // Include saved startup settings, even if restoring the hardware failed.
+    return pin >= 0 && pin < GPIO_NUM_MAX &&
+        (pin_configs[pin].mode != CONTROL_UNUSED || saved_pin_configs[pin].mode != CONTROL_UNUSED);
+}
 
 static inline bool uart_default_pin(int uart, int pin)
 {
@@ -181,8 +199,10 @@ static const char *unavailable_reason(int pin)
 #error "GPIO control needs native USB/JTAG pin definitions for this target"
 #endif
         return "native USB or chip-debug JTAG pin";
-    if (adc_pins & bit)
-        return "ADC1 pin (ADC streaming is enabled)";
+#ifdef CONFIG_ESP_ADC_STREAM_ENABLED
+    if (adc_stream_gpio_in_use(pin))
+        return "selected for ADC streaming or still in use by an ADC connection";
+#endif
     return NULL;
 }
 
@@ -321,23 +341,20 @@ esp_err_t gpio_control_init(void)
     if (control_mutex == NULL)
         return ESP_ERR_NO_MEM;
 
-#ifdef CONFIG_ESP_ADC_STREAM_ENABLED
-    // ADC GPIO can change at each connection; reserve the entire ADC1 set.
-    for (int channel = 0; channel < SOC_ADC_CHANNEL_NUM(0); channel++) {
-        int pin;
-        if (adc_continuous_channel_to_io(ADC_UNIT_1, channel, &pin) == ESP_OK && pin >= 0 && pin < 64)
-            adc_pins |= UINT64_C(1) << pin;
-    }
-#endif
-
-    nvs_handle_t handle;
-    esp_err_t err = nvs_open(GPIO_NVS_NAMESPACE, NVS_READONLY, &handle);
-    if (err == ESP_ERR_NVS_NOT_FOUND) {
-        ready = true;
-        return ESP_OK;
-    }
+    esp_err_t err = gpio_control_lock();
     if (err != ESP_OK)
         return err;
+    nvs_handle_t handle;
+    err = nvs_open(GPIO_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        ready = true;
+        gpio_control_unlock();
+        return ESP_OK;
+    }
+    if (err != ESP_OK) {
+        gpio_control_unlock();
+        return err;
+    }
     for (int pin = 0; pin < GPIO_NUM_MAX && pin < 64; pin++) {
         char key[8];
         snprintf(key, sizeof(key), "p%d", pin);
@@ -362,6 +379,7 @@ esp_err_t gpio_control_init(void)
     }
     nvs_close(handle);
     ready = true;
+    gpio_control_unlock();
     return ESP_OK;
 }
 
@@ -534,8 +552,11 @@ int gpio_control_command(FILE *out, int argc, char **argv)
         fprintf(out, "Error: GPIO control is not initialized.\n");
         return 1;
     }
-    xSemaphoreTake(control_mutex, portMAX_DELAY);
+    if (gpio_control_lock() != ESP_OK) {
+        fprintf(out, "Error: GPIO control lock is unavailable.\n");
+        return 1;
+    }
     int result = run_command(out, argc, argv);
-    xSemaphoreGive(control_mutex);
+    gpio_control_unlock();
     return result;
 }

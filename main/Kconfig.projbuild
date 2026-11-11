@@ -843,9 +843,10 @@ menu "CMSIS-DAP configuration"
                 An empty list allows no pins. ESP-IDF reserved pins, configured
                 DAP/LED/UART/console pins and native USB/chip-debug JTAG pins
                 are rejected even if listed here. When ADC streaming is enabled,
-                all ADC1-capable pins are excluded because its GPIO can change
-                at runtime. Exclude board-specific peripherals, strapping pins
-                and any pins used by the host application yourself.
+                its selected GPIO and any GPIO still held by an existing ADC
+                connection are excluded; other ADC1-capable pins remain usable.
+                Exclude board-specific peripherals, strapping pins and any pins
+                used by the host application yourself.
 
     endmenu
 
