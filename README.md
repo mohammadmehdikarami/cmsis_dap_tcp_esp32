@@ -557,6 +557,7 @@ Both consoles accept the same commands (replace `<pin>` with an allowed GPIO):
 
 ```text
 gpio list
+gpio config <pin> input
 gpio config <pin> input floating
 gpio config <pin> input pull-up
 gpio config <pin> input pull-down
@@ -568,6 +569,9 @@ gpio write <pin> 0
 gpio save <pin>
 gpio clear <pin>
 ```
+
+For inputs, the pull argument is optional and defaults to `floating`. The
+explicit `floating`, `pull-up` and `pull-down` options remain available.
 
 `config` applies the mode, input pull and initial output level only at runtime.
 `write` changes only the live output latch. Neither command writes NVS or
