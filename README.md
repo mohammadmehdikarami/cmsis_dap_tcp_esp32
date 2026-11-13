@@ -536,17 +536,18 @@ the ADC reading from a current sense amplifier:
 
 On ESP32-C3, ESP32-S3 and ESP32-C6, configure **CMSIS-DAP configuration >
 Manual GPIO control > Enable lightweight GPIO control commands**
-(`CONFIG_ESP_GPIO_CONTROL_ENABLED`). This feature is enabled by default when
-at least one console is enabled, and can be disabled to omit GPIO control
-from the build. It uses the existing serial and TCP consoles without
-creating another task. Existing sdkconfig files that explicitly disable it
-keep that setting until it is changed in menuconfig.
+(`CONFIG_ESP_GPIO_CONTROL_ENABLED`). This feature is disabled by default.
+Enable at least one console to make the option available. It uses the existing
+serial and TCP consoles without creating another task. Existing sdkconfig
+files that explicitly enable it keep that setting until it is changed in
+menuconfig.
 
 Set `CONFIG_ESP_GPIO_CONTROL_ALLOWED_PINS` to a comma-separated list of unused,
 exposed GPIO numbers for your board. The default empty list permits no pins,
 including restoration of any previously saved GPIO configurations.
-The `status` command shows the configured GPIO allow-list, or `(none)` when
-it is empty. Use `gpio list` for each pin's availability and configuration.
+When GPIO control is enabled, the `status` command shows the configured GPIO
+allow-list, or `(none)` when it is empty. Use `gpio list` for each pin's
+availability and configuration.
 Check the board schematic before adding pins: exclude strapping pins and pins
 connected to other board peripherals. Pins reserved by ESP-IDF (including
 flash/PSRAM), configured DAP/reset/LED and UART/console pins are rejected even
