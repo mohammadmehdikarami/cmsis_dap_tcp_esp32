@@ -574,14 +574,14 @@ For inputs, the pull argument is optional and defaults to `floating`. The
 explicit `floating`, `pull-up` and `pull-down` options remain available.
 
 `config` applies the mode, input pull and initial output level only at runtime.
-`write` changes only the live output latch. Neither command writes NVS or
+`write` changes only the commanded output level. Neither command writes NVS or
 changes previously saved startup settings, so scripts can reconfigure pins
 repeatedly without writing flash.
 
 Use `save <pin>` to explicitly save that pin's current mode, input pull and
-output latch level as its startup defaults in NVS. For example, configuring
+commanded output level as its startup defaults in NVS. For example, configuring
 an output at 0, writing 1, then saving it makes its startup level 1. For
-open-drain outputs, the latch is saved, not the measured pin voltage.
+open-drain outputs, the commanded level is saved, not the measured pin voltage.
 Unsaved changes are lost on reboot; previously saved settings are restored.
 Saved configurations are checked against the current allow-list and pin
 restrictions before being restored, before either console starts.
@@ -592,7 +592,8 @@ bootloader.
 `clear <pin>` explicitly removes that pin's saved configuration and leaves it
 as a floating input. Only `save` and `clear` write GPIO settings to NVS.
 `read` and `save` require a configured pin. `read` reports its physical input
-level; `list` shows live state and saved startup settings separately.
+level; `list` shows live state and saved startup settings separately. For outputs,
+`commanded` is the requested output level and `level` is the measured pin state.
 
 For open-drain outputs, level 0 drives low and level 1 releases the pin. The
 optional final argument is `floating` (the default) or `pull-up`. `pull-up`

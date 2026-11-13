@@ -418,10 +418,10 @@ static int run_command(FILE *out, int argc, char **argv)
             } else if (config->mode == CONTROL_INPUT) {
                 fprintf(out, "GPIO%d: input %s, level=%d\n", pin, pulls[config->pull], gpio_get_level(pin));
             } else if (config->mode == CONTROL_OPEN_DRAIN) {
-                fprintf(out, "GPIO%d: open-drain %s, latch=%d, level=%d\n", pin,
+                fprintf(out, "GPIO%d: open-drain %s, commanded=%d, level=%d\n", pin,
                         pulls[config->pull], output_levels[pin], gpio_get_level(pin));
             } else {
-                fprintf(out, "GPIO%d: push-pull, latch=%d, level=%d\n", pin,
+                fprintf(out, "GPIO%d: push-pull, commanded=%d, level=%d\n", pin,
                         output_levels[pin], gpio_get_level(pin));
             }
             const struct pin_config *saved = &saved_pin_configs[pin];
